@@ -276,6 +276,55 @@ class CoinbaseTrader:
         
         return errors
     
+    def get_order_url(self, order_id: str):
+        """
+        Construct Coinbase Advanced Trading URL for viewing an order
+        
+        Args:
+            order_id (str): The order ID returned from successful order placement
+        
+        Returns:
+            str: Direct URL to view the order in Coinbase Advanced Trading interface
+        """
+        # Coinbase Advanced Trading orders can be viewed through the main interface
+        # The URL format appears to be through the advanced trading dashboard
+        base_url = "https://www.coinbase.com/advanced-trade"
+        
+        # Since we can't construct a direct order URL without more specific routing info,
+        # we'll provide the orders page URL and include the order ID for easy reference
+        return f"{base_url}/orders"
+    
+    def log_order_placement(self, order_response, symbol: str, details: dict):
+        """
+        Log order placement details including order URL
+        
+        Args:
+            order_response: The order response object from API
+            symbol (str): Trading pair symbol
+            details (dict): Order details dictionary
+        """
+        if order_response and order_response.success and hasattr(order_response, 'success_response'):
+            success_resp = order_response.success_response
+            order_id = success_resp.get('order_id')
+            client_order_id = success_resp.get('client_order_id')
+            
+            print(f"✅ Order placed successfully!")
+            print(f"   Order ID: {order_id}")
+            print(f"   Client Order ID: {client_order_id}")
+            print(f"   Product: {symbol}")
+            print(f"   Size: {details.get('quantity')} {symbol.split('-')[0]}")
+            print(f"   Limit Price: ${details.get('limit_price'):.4f}")
+            print(f"   Expected Revenue: ${details.get('expected_revenue', 0):.2f}")
+            
+            # Log the order URL
+            order_url = self.get_order_url(order_id)
+            print(f"   📋 View Order: {order_url}")
+            print(f"   🔍 Search for Order ID: {order_id}")
+            
+            return order_id
+        
+        return None
+    
     def check_minimum_price_conditions(self, symbol: str, min_price: float):
         """Check if current market price meets minimum sell price condition"""
         current_price = self.get_current_price(symbol)
