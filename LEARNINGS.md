@@ -90,6 +90,7 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 5. **Test Market Data**: Verify price feeds work before implementing trading logic
 6. **Error Handling**: Implement comprehensive error handling for all API calls
 7. **Order Validation**: Test with small amounts first, then scale up
+8. **Code Consolidation**: Remove redundant scripts when flexible systems replace hardcoded ones
 
 ### 9. Configuration System Architecture
 - **JSON-Based Configuration**: External `trading_config.json` for strategy parameters
@@ -125,13 +126,14 @@ CoinbaseUtils/
 ├── config_validator.py        # Configuration validation utilities
 ├── trading_config.json        # Active trading configuration (not in git)
 ├── trading_config.example.json # Configuration template
-├── place_fil_order_direct.py  # Legacy: Direct FIL sell order script
 ├── test_fil_data.py           # Testing market data and balances
+├── debug_order_response.py    # Order response structure analysis
 ├── .cdp_api_key.json          # API credentials (not in git)
 ├── .env.example               # Environment variable template
 ├── .gitignore                 # Security: excludes credentials
 ├── requirements.txt           # Python dependencies
 ├── LEARNINGS.md              # This documentation
+├── agents.md                  # AI agent development guidelines
 └── CdpSdkInfo.md             # CDP SDK reference (for context)
 ```
 
@@ -168,6 +170,9 @@ python execute_trading_strategy.py --dry-run --verbose
 
 # Execute strategy (live trading)
 python execute_trading_strategy.py
+
+# Single asset trading (replaces legacy direct scripts)
+# Simply configure one trading pair and run execute_trading_strategy.py
 ```
 
 ## Core Functionality Implemented
