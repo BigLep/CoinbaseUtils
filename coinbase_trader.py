@@ -285,21 +285,18 @@ class CoinbaseTrader:
     
     def get_order_url(self, order_id: str):
         """
-        Construct Coinbase Advanced Trading URL for viewing an order
+        Construct Coinbase orders URL with order ID query parameter
         
         Args:
             order_id (str): The order ID returned from successful order placement
         
         Returns:
-            str: Direct URL to view the order in Coinbase Advanced Trading interface
+            str: URL to Coinbase orders page with orderId query parameter for easy identification
         """
-        # Coinbase Advanced Trading orders can be viewed through the main interface
-        # The URL format appears to be through the advanced trading dashboard
-        base_url = "https://www.coinbase.com/advanced-trade"
-        
-        # Since we can't construct a direct order URL without more specific routing info,
-        # we'll provide the orders page URL and include the order ID for easy reference
-        return f"{base_url}/orders"
+        # Use the correct Coinbase orders endpoint with order ID as query parameter
+        # This makes it easy to search for the specific order
+        base_url = "https://www.coinbase.com/orders"
+        return f"{base_url}?orderId={order_id}"
     
     def log_order_placement(self, order_response, symbol: str, details: dict):
         """

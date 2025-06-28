@@ -101,10 +101,12 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 
 ### 10. Order Management and Tracking
 - **Order ID Structure**: Coinbase uses UUIDs for both order_id and client_order_id
-- **Order URLs**: Orders viewable at https://www.coinbase.com/advanced-trade/orders
+- **Order URLs**: Orders viewable at https://www.coinbase.com/orders
+- **Query Parameters**: Custom orderId parameter for easy order identification
+- **URL Format**: `https://www.coinbase.com/orders?orderId={order_id}`
 - **Order Response**: Successful orders return success_response with order details
-- **Order Tracking**: System logs order ID, client ID, and direct URL for easy access
-- **Search Capability**: Order IDs can be searched in Coinbase Advanced Trading interface
+- **Order Tracking**: System logs order ID, client ID, and direct URL with query parameter
+- **Search Capability**: Order IDs can be searched in Coinbase interface or via URL parameter
 
 ### 11. Production Trading Insights
 - **Post-Only Orders**: Always use for better maker fees when possible

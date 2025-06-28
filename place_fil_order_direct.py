@@ -33,7 +33,7 @@ def main():
         # The order was successful, so it should be in your pending orders
         print(f"\n📋 Order Status:")
         print(f"✅ Post-only limit sell order placed successfully")
-        print(f"💰 You'll receive ${float(details['limit_price']) * float(details['size']):.2f} when filled")
+        print(f"💰 You'll receive ${float(details['limit_price']) * float(details['quantity']):.2f} when filled")
         
     else:
         error = result.get("error", "Unknown error")
