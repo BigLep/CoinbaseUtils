@@ -99,13 +99,21 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 - **Validation Pipeline**: Comprehensive validation before order execution
 - **Dry-Run Capability**: Test strategies without placing actual orders
 
-### 10. Production Trading Insights
+### 10. Order Management and Tracking
+- **Order ID Structure**: Coinbase uses UUIDs for both order_id and client_order_id
+- **Order URLs**: Orders viewable at https://www.coinbase.com/advanced-trade/orders
+- **Order Response**: Successful orders return success_response with order details
+- **Order Tracking**: System logs order ID, client ID, and direct URL for easy access
+- **Search Capability**: Order IDs can be searched in Coinbase Advanced Trading interface
+
+### 11. Production Trading Insights
 - **Post-Only Orders**: Always use for better maker fees when possible
 - **Price Calculations**: Implement percentage-based pricing for dynamic strategies
 - **Market Data**: Use `get_product()` method for current prices (includes price + volume data)
 - **Order Types**: GTC (Good Till Cancelled) orders stay active until filled or cancelled
 - **Fee Optimization**: Post-only orders typically have lower fees than market orders
 - **Configuration-Driven**: Change trading parameters without code modifications
+- **Order Visibility**: All orders logged with direct URLs for immediate access
 
 ## Project Structure
 ```

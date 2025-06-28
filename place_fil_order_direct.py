@@ -25,7 +25,7 @@ def main():
         
         print("✅ Order placed successfully!")
         print(f"Product: {details['product_id']}")
-        print(f"Size: {details['size']} FIL")
+        print(f"Size: {details['quantity']} FIL")
         print(f"Limit Price: ${details['limit_price']:.3f}")
         print(f"Current Price: ${details['current_price']:.3f}")
         print(f"Price Offset: +{details['offset_percent']}%")
