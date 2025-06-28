@@ -1,0 +1,48 @@
+{
+  "default_settings": {
+    "order_type": "post_only_limit",
+    "price_strategy": "percentage_above_market",
+    "dry_run": false
+  },
+  "trading_pairs": [
+    {
+      "symbol": "FIL-USD",
+      "enabled": true,
+      "quantity": "1.0",
+      "minimum_sell_price": "2.50",
+      "price_offset_percent": 0.1,
+      "description": "Filecoin trading pair"
+    },
+    {
+      "symbol": "BTC-USD", 
+      "enabled": false,
+      "quantity": "0.001",
+      "minimum_sell_price": "50000.00",
+      "price_offset_percent": 0.2,
+      "description": "Bitcoin trading pair (disabled)"
+    },
+    {
+      "symbol": "ETH-USD",
+      "enabled": false,
+      "quantity": "0.01",
+      "minimum_sell_price": "3000.00", 
+      "price_offset_percent": 0.15,
+      "description": "Ethereum trading pair (disabled)"
+    }
+  ],
+  "_comments": {
+    "default_settings": {
+      "order_type": "Type of order to place (post_only_limit, limit, market)",
+      "price_strategy": "How to calculate sell price (percentage_above_market, fixed_price)",
+      "dry_run": "If true, will simulate orders without actually placing them"
+    },
+    "trading_pairs": {
+      "symbol": "Trading pair symbol (e.g., BTC-USD, ETH-USD)",
+      "enabled": "Whether to include this pair in automated trading",
+      "quantity": "Amount of base asset to sell (as string for precision)",
+      "minimum_sell_price": "Minimum price to accept for selling (safety check)",
+      "price_offset_percent": "Percentage above current market price to set limit order",
+      "description": "Human-readable description of this trading pair"
+    }
+  }
+}
