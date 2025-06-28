@@ -171,16 +171,23 @@ class CoinbaseTrader:
         order = self.place_post_only_limit_sell(product_id, size, limit_price_str)
         
         if order and order.success:
+            # Create details for logging
+            order_details = {
+                "product_id": product_id,
+                "current_price": current_price,
+                "limit_price": limit_price,
+                "quantity": size,
+                "offset_percent": price_offset_percent
+            }
+            
+            # Log order placement with URL
+            order_id = self.log_order_placement(order, product_id, order_details)
+            
             return {
                 "success": True,
                 "order": order,
-                "details": {
-                    "product_id": product_id,
-                    "current_price": current_price,
-                    "limit_price": limit_price,
-                    "size": size,
-                    "offset_percent": price_offset_percent
-                }
+                "order_id": order_id,
+                "details": order_details
             }
         elif order and order.error_response:
             return {"error": f"Order failed: {order.error_response.get('error', 'Unknown error')} - {order.error_response.get('message', '')}"}
@@ -400,18 +407,24 @@ class CoinbaseTrader:
             order = self.place_post_only_limit_sell(symbol, quantity, limit_price_str)
             
             if order and order.success:
-                print("✅ Order placed successfully!")
+                # Create details for logging
+                order_details = {
+                    "current_price": current_price,
+                    "limit_price": limit_price,
+                    "quantity": quantity,
+                    "offset_percent": offset_percent,
+                    "expected_revenue": float(limit_price_str) * float(quantity)
+                }
+                
+                # Log order placement with URL
+                order_id = self.log_order_placement(order, symbol, order_details)
+                
                 return {
                     "success": True,
                     "order": order,
+                    "order_id": order_id,
                     "symbol": symbol,
-                    "details": {
-                        "current_price": current_price,
-                        "limit_price": limit_price,
-                        "quantity": quantity,
-                        "offset_percent": offset_percent,
-                        "expected_revenue": float(limit_price_str) * float(quantity)
-                    }
+                    "details": order_details
                 }
             elif order and order.error_response:
                 error_msg = f"{order.error_response.get('error', 'Unknown error')} - {order.error_response.get('message', '')}"

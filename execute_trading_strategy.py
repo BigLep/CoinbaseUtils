@@ -64,8 +64,10 @@ def main():
             
             if result.get("success"):
                 successful_orders += 1
-                if not dry_run:
+                if not dry_run and 'order_id' in result:
+                    order_id = result['order_id']
                     print(f"💰 Expected revenue: ${result['details']['expected_revenue']:.2f}")
+                    print(f"📋 Order ID: {order_id}")
             else:
                 failed_orders += 1
                 print(f"❌ Failed: {result.get('error', 'Unknown error')}")
