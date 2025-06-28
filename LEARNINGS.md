@@ -91,18 +91,31 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 6. **Error Handling**: Implement comprehensive error handling for all API calls
 7. **Order Validation**: Test with small amounts first, then scale up
 
-### 9. Production Trading Insights
+### 9. Configuration System Architecture
+- **JSON-Based Configuration**: External `trading_config.json` for strategy parameters
+- **Multi-Asset Support**: Configure multiple trading pairs with individual settings
+- **Risk Management**: Built-in minimum price checks and balance validation
+- **Template System**: `trading_config.example.json` provides configuration template
+- **Validation Pipeline**: Comprehensive validation before order execution
+- **Dry-Run Capability**: Test strategies without placing actual orders
+
+### 10. Production Trading Insights
 - **Post-Only Orders**: Always use for better maker fees when possible
 - **Price Calculations**: Implement percentage-based pricing for dynamic strategies
 - **Market Data**: Use `get_product()` method for current prices (includes price + volume data)
 - **Order Types**: GTC (Good Till Cancelled) orders stay active until filled or cancelled
 - **Fee Optimization**: Post-only orders typically have lower fees than market orders
+- **Configuration-Driven**: Change trading parameters without code modifications
 
 ## Project Structure
 ```
 CoinbaseUtils/
-├── coinbase_trader.py          # Main trading class with post-only orders
-├── place_fil_order_direct.py  # Example: FIL sell order script
+├── coinbase_trader.py          # Main trading class with configuration support
+├── execute_trading_strategy.py # Configuration-driven order execution
+├── config_validator.py        # Configuration validation utilities
+├── trading_config.json        # Active trading configuration (not in git)
+├── trading_config.example.json # Configuration template
+├── place_fil_order_direct.py  # Legacy: Direct FIL sell order script
 ├── test_fil_data.py           # Testing market data and balances
 ├── .cdp_api_key.json          # API credentials (not in git)
 ├── .env.example               # Environment variable template
@@ -110,6 +123,41 @@ CoinbaseUtils/
 ├── requirements.txt           # Python dependencies
 ├── LEARNINGS.md              # This documentation
 └── CdpSdkInfo.md             # CDP SDK reference (for context)
+```
+
+## Configuration System Usage
+
+### Basic Configuration
+```json
+{
+  "default_settings": {
+    "order_type": "post_only_limit",
+    "price_strategy": "percentage_above_market",
+    "dry_run": false
+  },
+  "trading_pairs": [
+    {
+      "symbol": "FIL-USD",
+      "enabled": true,
+      "quantity": "1.0",
+      "minimum_sell_price": "2.00",
+      "price_offset_percent": 0.1,
+      "description": "Filecoin trading pair"
+    }
+  ]
+}
+```
+
+### Execution Commands
+```bash
+# Validate configuration
+python config_validator.py --full-check
+
+# Execute strategy (dry run)
+python execute_trading_strategy.py --dry-run --verbose
+
+# Execute strategy (live trading)
+python execute_trading_strategy.py
 ```
 
 ## Core Functionality Implemented
@@ -121,6 +169,11 @@ CoinbaseUtils/
 - ✅ **Post-Only Orders**: Maker-only orders for better fees
 - ✅ **Order Management**: Check order status and cancel orders
 - ✅ **Price Calculations**: Automatic percentage-based pricing
+- ✅ **Configuration System**: JSON-based trading strategy configuration
+- ✅ **Multi-Asset Trading**: Support for multiple trading pairs via configuration
+- ✅ **Risk Management**: Minimum price enforcement and balance validation
+- ✅ **Dry-Run Mode**: Safe testing without actual order placement
+- ✅ **Validation Utilities**: Comprehensive configuration and market data validation
 - ✅ **Live Trading**: Successfully placed FIL sell order at +0.1% above market
 
 ## Next Steps for Scaling
