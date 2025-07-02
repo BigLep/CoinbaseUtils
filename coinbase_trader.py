@@ -183,6 +183,9 @@ class CoinbaseTrader:
             # Log order placement with URL
             order_id = self.log_order_placement(order, product_id, order_details)
             
+            # Log post-order balance status
+            self.log_post_order_balance(product_id, float(size))
+            
             return {
                 "success": True,
                 "order": order,
@@ -329,6 +332,87 @@ class CoinbaseTrader:
         
         return None
     
+    def get_asset_balance(self, asset_symbol: str):
+        """
+        Get available balance for a specific asset
+        
+        Args:
+            asset_symbol (str): Asset symbol (e.g., 'FIL', 'BTC', 'ETH')
+        
+        Returns:
+            dict: Balance information including available amount and currency
+        """
+        try:
+            accounts = self.get_accounts()
+            if not accounts:
+                return {"error": "Could not get account information"}
+            
+            # Look for account with matching currency
+            for account in accounts.accounts:
+                if account.currency == asset_symbol:
+                    available = float(account.available_balance.get('value', 0))
+                    return {
+                        "currency": asset_symbol,
+                        "available": available,
+                        "formatted": f"{available} {asset_symbol}"
+                    }
+            
+            # Asset not found in accounts
+            return {
+                "currency": asset_symbol,
+                "available": 0.0,
+                "formatted": f"0 {asset_symbol}",
+                "note": "Asset not found in accounts"
+            }
+            
+        except Exception as e:
+            return {"error": f"Error getting balance for {asset_symbol}: {e}"}
+    
+    def log_post_order_balance(self, symbol: str, order_quantity: float):
+        """
+        Log remaining balance after order placement
+        
+        Args:
+            symbol (str): Trading pair symbol (e.g., 'FIL-USD')
+            order_quantity (float): Amount that was ordered
+        """
+        # Extract base asset from trading pair (e.g., 'FIL' from 'FIL-USD')
+        if '-' in symbol:
+            base_asset = symbol.split('-')[0]
+        else:
+            print(f"⚠️  Invalid symbol format: {symbol}")
+            return
+        
+        # Get current balance
+        balance_info = self.get_asset_balance(base_asset)
+        
+        if "error" in balance_info:
+            print(f"⚠️  Could not check post-order balance: {balance_info['error']}")
+            return
+        
+        available = balance_info["available"]
+        
+        print(f"📊 Post-Order Balance Status:")
+        print(f"   Asset: {base_asset}")
+        print(f"   Ordered: {order_quantity} {base_asset}")
+        print(f"   Remaining: {available} {base_asset}")
+        
+        # Calculate percentage of holdings sold
+        if available > 0:
+            total_before_order = available + order_quantity
+            percentage_sold = (order_quantity / total_before_order) * 100
+            percentage_remaining = (available / total_before_order) * 100
+            print(f"   Sold: {percentage_sold:.1f}% of holdings")
+            print(f"   Available: {percentage_remaining:.1f}% remaining")
+        
+        # Provide context for future trades
+        if available >= order_quantity:
+            print(f"   ✅ Sufficient balance for another {order_quantity} {base_asset} order")
+        elif available > 0:
+            print(f"   ⚠️  Only {available} {base_asset} available for future orders")
+        else:
+            print(f"   ❌ No {base_asset} remaining for additional orders")
+    
     def check_minimum_price_conditions(self, symbol: str, min_price: float):
         """Check if current market price meets minimum sell price condition"""
         current_price = self.get_current_price(symbol)
@@ -415,6 +499,9 @@ class CoinbaseTrader:
                 
                 # Log order placement with URL
                 order_id = self.log_order_placement(order, symbol, order_details)
+                
+                # Log post-order balance status
+                self.log_post_order_balance(symbol, float(quantity))
                 
                 return {
                     "success": True,

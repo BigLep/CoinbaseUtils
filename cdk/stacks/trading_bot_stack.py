@@ -73,15 +73,7 @@ class TradingBotStack(Stack):
         coinbase_secrets.grant_read(lambda_role)
         notification_topic.grant_publish(lambda_role)
 
-        # Lambda Layer for dependencies
-        dependencies_layer = _lambda.LayerVersion(
-            self, "TradingBotDependencies",
-            code=_lambda.Code.from_asset("../lambda_layer"),
-            compatible_runtimes=[_lambda.Runtime.PYTHON_3_11],
-            description="Dependencies for Coinbase trading bot"
-        )
-
-        # Lambda function
+        # Lambda function (with bundled dependencies - simpler approach)
         trading_lambda = _lambda.Function(
             self, "TradingBotFunction",
             runtime=_lambda.Runtime.PYTHON_3_11,
@@ -89,8 +81,7 @@ class TradingBotStack(Stack):
             code=_lambda.Code.from_asset("../lambda"),
             role=lambda_role,
             timeout=lambda_timeout,
-            memory_size=256,
-            layers=[dependencies_layer],
+            memory_size=512,  # Increased for bundled dependencies
             environment={
                 "CONFIG_BUCKET": config_bucket.bucket_name,
                 "SECRETS_ARN": coinbase_secrets.secret_arn,

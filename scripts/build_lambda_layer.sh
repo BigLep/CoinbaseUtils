@@ -1,7 +1,5 @@
 #!/bin/bash
-"""
-Build Lambda layer with Python dependencies
-"""
+# Build Lambda layer with Python dependencies
 
 set -e
 

@@ -1,7 +1,5 @@
 #!/bin/bash
-"""
-Deploy Coinbase Trading Bot to AWS
-"""
+# Deploy Coinbase Trading Bot to AWS
 
 set -e
 
@@ -21,11 +19,7 @@ aws sts get-caller-identity || {
     exit 1
 }
 
-# Build Lambda layer
-echo "Building Lambda layer..."
-./scripts/build_lambda_layer.sh
-
-# Prepare Lambda package
+# Prepare Lambda package (with bundled dependencies)
 echo "Preparing Lambda package..."
 ./scripts/prepare_lambda_package.sh
 
