@@ -23,3 +23,36 @@ coverage.xml
 .mypy_cache
 .pytest_cache
 .hypothesis
+
+# AWS CDK
+cdk/cdk.out/
+cdk/node_modules/
+cdk/package-lock.json
+
+# Lambda build artifacts
+lambda/_cffi_backend.*
+lambda/backoff/
+lambda/bin/
+lambda/certifi/
+lambda/cffi/
+lambda/charset_normalizer/
+lambda/coinbase/
+lambda/cryptography/
+lambda/dotenv/
+lambda/idna/
+lambda/jwt/
+lambda/pycparser/
+lambda/requests/
+lambda/urllib3/
+lambda/websockets/
+lambda_layer/
+
+# Mac artifacts
+.DS_Store
+
+# Temporary test files
+debug_*.py
+test_*.py
+check_*.py
+place_*.py
+response.json
