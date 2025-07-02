@@ -231,13 +231,17 @@ python execute_trading_strategy.py
 
 #### 1. **Cross-Platform Dependency Build Issues** - ⚠️ BLOCKING PRODUCTION
 **Problem**: The `cryptography` library contains architecture-specific compiled binaries
-- **Root Cause**: Building dependencies on macOS ARM64 creates binaries incompatible with AWS Lambda runtime
+- **Root Cause**: Coinbase Advanced Trading API requires ES256 (ECDSA) JWT signatures
+- **Dependency Chain**: `coinbase-advanced-py` → `PyJWT` → `cryptography` → `cffi` → compiled C/Rust binaries
+- **Why Cryptography is Required**: ES256 elliptic curve operations are computationally intensive and require compiled libraries for performance and security
+- **Architecture Mismatch**: Mac ARM64 → AWS Lambda x86_64/ARM64 compatibility issues
 - **Error**: `invalid ELF header` when Lambda tries to import `cryptography` module
 - **Impact**: CoinbaseTrader cannot initialize, falling back to mock implementation
-- **Attempted Solutions**:
-  - Tried ARM64 Lambda architecture (still incompatible)
-  - Tried x86_64 Lambda architecture (still incompatible)
-  - Dependencies built locally on Mac don't work in Lambda Linux environment
+- **Why Pure Python Won't Work**: 
+  - Pure Python ECDSA libraries exist (python-jose, ecdsa) but have critical security vulnerabilities
+  - CVE-2024-23342: Timing attacks can leak private keys in pure Python implementations
+  - Not recommended for production use with real trading credentials
+- **Correct Solution**: Build dependencies in Linux environment, not avoid cryptography
 
 #### 2. **Mac Development Environment Challenges**
 - **Package Building**: `pip install --target` on Mac creates Mac-specific binaries
