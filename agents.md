@@ -4,36 +4,8 @@ This document outlines best practices for AI agents (like Claude) working on thi
 
 ## Git Commit Strategy
 
-### Commit After Each Major Step
-- **Rule**: Create a commit after completing each significant development milestone
-- **Definition of "Major Step"**: 
-  - Adding a new feature or capability
-  - Implementing a new class or module
-  - Fixing a significant bug
-  - Completing a phase of work (e.g., "configuration validation complete")
-  - Before switching to a different area of development
-
-### Commit Message Format
-```
-Brief description of changes (50 chars max)
-
-Detailed explanation if needed:
-• Key features added
-• Technical changes made
-• Integration points modified
-
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
-### Example Good Commit Points
-- ✅ After implementing configuration validation system
-- ✅ After adding new trading pair support
-- ✅ After fixing price precision issues
-- ✅ After completing dry-run functionality
-- ✅ After updating documentation with new features
-- ❌ After changing a single line or minor fix (unless critical)
+- **Rule**: Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit. See [CONTRIBUTING.md](CONTRIBUTING.md) for types, format, and examples.
+- **Commit after each major step**: After adding a feature, fixing a significant bug, completing a phase of work, or before switching to a different area. Don’t wait for “perfect” code; atomic commits help.
 
 ## Knowledge Capture in LEARNINGS.md
 
@@ -85,7 +57,7 @@ Update the learnings document whenever you discover or implement:
 3. **Implement**: Write code following existing patterns
 4. **Test**: Verify functionality works correctly
 5. **Document**: Update LEARNINGS.md if new insights discovered
-6. **Commit**: Create descriptive commit with changes
+6. **Commit**: Use conventional commit message (see [CONTRIBUTING.md](CONTRIBUTING.md))
 7. **Validate**: Ensure system still works end-to-end
 
 ### Todo List Management
