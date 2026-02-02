@@ -8,6 +8,54 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+
+def _serializable_result(result):
+    """Return a copy of result with only JSON-serializable values (no SDK objects)."""
+    out = {}
+    for key in ("success", "symbol", "error", "order_id", "dry_run", "mock", "details"):
+        if key in result:
+            val = result[key]
+            if hasattr(val, "__dict__") and not isinstance(
+                val, (dict, list, str, int, float, bool, type(None))
+            ):
+                continue
+            out[key] = val
+    if "pair_config" in result and isinstance(result["pair_config"], dict):
+        out["pair_config"] = result["pair_config"]
+    return out
+
+
+def _run_strategy(config_data, trader, request_id="local"):
+    """Run trading loop and return JSON-serializable summary."""
+    results = []
+    trading_pairs = config_data.get("trading_pairs", [])
+    default_settings = config_data.get("default_settings", {})
+    dry_run = default_settings.get("dry_run", False)
+    for pair_config in trading_pairs:
+        if not pair_config.get("enabled", False):
+            continue
+        try:
+            result = trader.place_configured_order(pair_config, dry_run=dry_run)
+            results.append(_serializable_result(result))
+        except Exception as e:
+            results.append({
+                "success": False,
+                "symbol": pair_config.get("symbol", "Unknown"),
+                "error": str(e),
+            })
+    successful = [r for r in results if r.get("success")]
+    failed = [r for r in results if not r.get("success")]
+    return {
+        "timestamp": request_id,
+        "total_pairs": len(trading_pairs),
+        "processed_pairs": len(results),
+        "successful_orders": len(successful),
+        "failed_orders": len(failed),
+        "dry_run": dry_run,
+        "results": results,
+    }
+
+
 def lambda_handler(event, context):
     """
     AWS Lambda handler for Coinbase trading bot
@@ -32,7 +80,7 @@ def lambda_handler(event, context):
         # Retrieve API credentials from Secrets Manager
         logger.info("Retrieving API credentials from Secrets Manager")
         try:
-            secret_response = secrets_client.get_secret_value(SecretArn=secrets_arn)
+            secret_response = secrets_client.get_secret_value(SecretId=secrets_arn)
             credentials = json.loads(secret_response['SecretString'])
             
             # Extract credentials (using correct field names from Secrets Manager)
@@ -85,60 +133,33 @@ def lambda_handler(event, context):
             logger.info("CoinbaseTrader initialized successfully")
             
         except Exception as e:
-            # Fallback to mock trader if import fails (e.g., due to cryptography library issues)
-            logger.warning(f"Failed to initialize CoinbaseTrader: {str(e)}")
-            logger.info("Using mock trader for demonstration")
-            trader = MockTrader()
+            # Fallback to mock trader if import fails (e.g., cryptography built for wrong OS on Lambda)
+            logger.warning(f"Failed to initialize CoinbaseTrader: {str(e)}", exc_info=True)
+            logger.info("Using mock trader - no real orders will be placed")
+            trader = MockTrader(init_error=str(e))
             trader.config = config_data
+            # Notify that real trading is disabled so you can fix the deployment
+            send_notification(
+                sns_client, notification_topic_arn,
+                "Trading Bot: Real trader failed - running in mock mode",
+                f"CoinbaseTrader failed to initialize. No real orders were placed.\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Common cause: Lambda package was built on Mac (cryptography incompatible with Linux).\n"
+                f"Fix: Run ./scripts/prepare_lambda_package.sh (with Docker installed) then redeploy."
+            )
         
-        # Execute trading strategy
-        results = []
-        trading_pairs = config_data.get('trading_pairs', [])
-        default_settings = config_data.get('default_settings', {})
-        dry_run = default_settings.get('dry_run', False)
-        
-        logger.info(f"Processing {len(trading_pairs)} trading pairs (dry_run: {dry_run})")
-        
-        for pair_config in trading_pairs:
-            if not pair_config.get('enabled', False):
-                logger.info(f"Skipping disabled pair: {pair_config.get('symbol', 'Unknown')}")
-                continue
-            
-            try:
-                result = trader.place_configured_order(pair_config, dry_run=dry_run)
-                results.append(result)
-                logger.info(f"Processed {pair_config['symbol']}: {result.get('success', False)}")
-                
-            except Exception as e:
-                error_result = {
-                    "success": False,
-                    "symbol": pair_config.get('symbol', 'Unknown'),
-                    "error": str(e)
-                }
-                results.append(error_result)
-                logger.error(f"Error processing {pair_config['symbol']}: {str(e)}")
-        
-        # Prepare execution summary
-        successful_orders = [r for r in results if r.get('success')]
-        failed_orders = [r for r in results if not r.get('success')]
-        
-        summary = {
-            "timestamp": context.aws_request_id,
-            "total_pairs": len(trading_pairs),
-            "processed_pairs": len(results),
-            "successful_orders": len(successful_orders),
-            "failed_orders": len(failed_orders),
-            "dry_run": dry_run,
-            "results": results
-        }
+        # Execute trading strategy (same logic as execute_trading_strategy.py locally)
+        summary = _run_strategy(config_data, trader, request_id=context.aws_request_id)
+        logger.info(f"Processing {summary['processed_pairs']} pairs (dry_run: {summary['dry_run']})")
+        logger.info(f"Execution completed: {summary['successful_orders']} successful, {summary['failed_orders']} failed")
         
         # Send notification email
-        notification_subject = f"Trading Bot Execution {'(DRY RUN)' if dry_run else ''}"
+        notification_subject = f"Trading Bot Execution {'(DRY RUN)' if summary['dry_run'] else ''}"
         notification_message = format_execution_report(summary)
         
         send_notification(sns_client, notification_topic_arn, notification_subject, notification_message)
         
-        logger.info(f"Execution completed: {len(successful_orders)} successful, {len(failed_orders)} failed")
+        logger.info(f"Execution completed: {summary['successful_orders']} successful, {summary['failed_orders']} failed")
         
         return create_response(200, summary)
         
@@ -159,17 +180,17 @@ def lambda_handler(event, context):
 class MockTrader:
     """Mock trader for testing when actual trader cannot be initialized"""
     
-    def __init__(self):
+    def __init__(self, init_error=None):
         self.config = None
+        self.init_error = init_error or "cryptography/library not available in Lambda environment"
     
     def place_configured_order(self, pair_config, dry_run=False):
         """Mock order placement that always returns failure"""
         symbol = pair_config.get('symbol', 'Unknown')
-        
         return {
             "success": False,
             "symbol": symbol,
-            "error": "Mock trader - cryptography library not available in Lambda environment",
+            "error": f"Mock trader - real trader failed to load: {self.init_error}",
             "mock": True,
             "pair_config": pair_config
         }

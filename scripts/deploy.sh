@@ -1,21 +1,51 @@
 #!/bin/bash
 # Deploy Coinbase Trading Bot to AWS
+# Requires .env with AWS_PROFILE=your-profile (no default).
+# Configure the profile with: aws configure --profile <name>
 
 set -e
 
-# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# Source .env (required for AWS_PROFILE)
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+  echo "❌ No .env file. Create one from .env.example and set AWS_PROFILE=your-profile"
+  exit 1
+fi
+set -a
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/.env"
+set +a
+
+if [ -z "${AWS_PROFILE:-}" ]; then
+  echo "❌ AWS_PROFILE is not set. Add AWS_PROFILE=your-profile to .env"
+  exit 1
+fi
+export AWS_PROFILE
+
+if [ -z "${AWS_REGION:-}" ]; then
+  echo "❌ AWS_REGION is not set. Add AWS_REGION=us-west-2 (or your region) to .env"
+  exit 1
+fi
+
+# Optional overrides from command line: ./scripts/deploy.sh [email] [region]
 NOTIFICATION_EMAIL=${1:-"your-email@example.com"}
-AWS_REGION=${2:-"us-east-1"}
+if [ -n "${2:-}" ]; then AWS_REGION=$2; fi
+export AWS_DEFAULT_REGION=$AWS_REGION
 
 echo "=== Coinbase Trading Bot Deployment ==="
+echo "AWS Profile: $AWS_PROFILE"
 echo "Notification Email: $NOTIFICATION_EMAIL"
 echo "AWS Region: $AWS_REGION"
 echo ""
 
-# Check AWS credentials
+# Check AWS credentials (uses $AWS_PROFILE)
 echo "Checking AWS credentials..."
 aws sts get-caller-identity || {
-    echo "❌ AWS credentials not configured. Please run 'aws configure' first."
+    echo "❌ AWS credentials not configured for profile '$AWS_PROFILE'."
+    echo "   Run: aws configure --profile $AWS_PROFILE"
     exit 1
 }
 

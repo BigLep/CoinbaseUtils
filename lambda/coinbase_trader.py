@@ -1,10 +1,14 @@
 import os
 import json
 from decimal import Decimal
-from dotenv import load_dotenv
-from coinbase.rest import RESTClient
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from coinbase.rest import RESTClient
 
 class CoinbaseTrader:
     def __init__(self, key_file=".cdp_api_key.json", config_file="trading_config.json"):
@@ -20,19 +24,16 @@ class CoinbaseTrader:
         with open(self.key_file, 'r') as f:
             key_data = json.load(f)
         
-        # Extract credentials from the JSON structure
-        if 'id' in key_data and 'privateKey' in key_data:
-            # This is the format you have - convert to what SDK expects
-            api_key = key_data['id']
-            api_secret = f"-----BEGIN EC PRIVATE KEY-----\n{key_data['privateKey']}\n-----END EC PRIVATE KEY-----"
-            
-            # Initialize REST client with credentials
-            self.client = RESTClient(
-                api_key=api_key,
-                api_secret=api_secret
-            )
+        # Extract credentials (support "name" or "id"; Lambda/Secrets use "name")
+        api_key = key_data.get("name") or key_data.get("id")
+        private_key = key_data.get("privateKey")
+        if api_key and private_key:
+            if not private_key.strip().startswith("-----BEGIN"):
+                api_secret = f"-----BEGIN EC PRIVATE KEY-----\n{private_key}\n-----END EC PRIVATE KEY-----"
+            else:
+                api_secret = private_key
+            self.client = RESTClient(api_key=api_key, api_secret=api_secret)
         else:
-            # Try to use the file directly (standard CDP format)
             self.client = RESTClient(key_file=self.key_file)
         
         # Load trading configuration if file exists

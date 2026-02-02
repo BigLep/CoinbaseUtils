@@ -61,34 +61,54 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 ### AWS Lambda Deployment
 
 1. **Prerequisites:**
-   ```bash
-   # Install AWS CDK
-   npm install -g aws-cdk
-   
-   # Install Python dependencies
-   cd cdk && npm install
-   pip install aws-cdk-lib constructs
-   ```
+   - **Docker** (recommended): used by the deploy script to build Lambda dependencies for Linux. Without it, Mac-built packages may fail on Lambda.
+   - **AWS CLI** with a configured profile (see step 2).
+   - **Node.js** and **AWS CDK**: `npm install -g aws-cdk`, then `cd cdk && npm install`. Python: `pip install aws-cdk-lib constructs`.
 
-2. **Deploy infrastructure:**
+2. **Configure AWS profile and region (required):**
    ```bash
-   # Configure AWS credentials
-   aws configure
-   
-   # Deploy to AWS
+   # Copy .env.example to .env and set AWS_PROFILE and AWS_REGION to match your deployment
+   cp .env.example .env
+   # Edit .env:
+   #   AWS_PROFILE=coinbase-bot
+   #   AWS_REGION=us-west-2   (or the region where you deploy)
+
+   # Configure that profile with the AWS CLI (one-time)
+   aws configure --profile coinbase-bot
+   ```
+   All scripts (deploy, upload_config, etc.) use this profile and region so the stack, bucket, and Lambda are in one place.
+
+3. **Deploy infrastructure:**
+   ```bash
+   # Deploy reads AWS_PROFILE from .env and runs the Lambda package build + CDK deploy
    ./scripts/deploy.sh
-   ```
 
-3. **Configure secrets and trading config:**
-   ```bash
-   # Store API credentials in Secrets Manager
-   aws secretsmanager put-secret-value \
-     --secret-id <SECRET_ARN> \
-     --secret-string '{"name":"organizations/.../apiKeys/...","privateKey":"-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----\n"}'
-   
-   # Upload trading configuration to S3
-   aws s3 cp trading_config.json s3://<BUCKET_NAME>/trading_config.json
+   # Optional: override notification email and region
+   ./scripts/deploy.sh your-email@example.com us-east-1
    ```
+   The script builds the Lambda package (using Docker when available for Linux-compatible dependencies) and deploys the stack.
+
+4. **Configure secrets and trading config (one-time per stack):**
+   ```bash
+   # Get the secret and bucket from deploy output, or:
+   # aws cloudformation describe-stacks --stack-name CoinbaseTradingBotStack --query 'Stacks[0].Outputs' --profile <your-profile>
+
+   # Store Coinbase API credentials in Secrets Manager (use ARN from stack outputs)
+   aws secretsmanager put-secret-value \
+     --secret-id <SECRETS_ARN> \
+     --secret-string '{"name":"organizations/.../apiKeys/...","privateKey":"-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----\n"}'
+
+   # Upload trading configuration to S3 (uses AWS_PROFILE from .env, bucket from stack)
+   ./scripts/upload_config.sh
+   ```
+   Use the same AWS profile (e.g. set `AWS_PROFILE` in .env) when running these commands.
+
+5. **Update trading config later:**  
+   After editing `trading_config.json`, upload it so the Lambda uses the new config:
+   ```bash
+   ./scripts/upload_config.sh
+   ```
+   Optional: `./scripts/upload_config.sh /path/to/other_config.json` to upload a different file.
 
 ## Project Structure
 
@@ -106,14 +126,15 @@ CoinbaseUtils/
 │   └── stacks/
 │       └── trading_bot_stack.py # Lambda, S3, SNS, EventBridge
 │
-├── lambda/                   # AWS Lambda code
+├── lambda/                   # Lambda code (handler + deps; built by prepare_lambda_package.sh)
 │   ├── lambda_function.py   # Lambda handler
-│   ├── coinbase_trader.py   # Trading logic (copied)
-│   └── trading_config.json  # Config (uploaded to S3)
+│   ├── coinbase_trader.py   # Trading logic (copied from root)
+│   └── ...                  # Dependencies installed here for Linux (Docker)
 │
-└── scripts/                  # Deployment scripts
-    ├── deploy.sh            # Main deployment script
-    └── prepare_lambda_package.sh # Lambda package builder
+└── scripts/
+    ├── deploy.sh            # Deploy stack (requires .env with AWS_PROFILE; runs prepare then CDK)
+    ├── prepare_lambda_package.sh # Build Lambda package (Docker for Linux deps)
+    └── upload_config.sh     # Upload trading_config.json to S3 (uses .env and stack bucket)
 ```
 
 ## Configuration
@@ -142,12 +163,22 @@ CoinbaseUtils/
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CONFIG_BUCKET` | S3 bucket for trading config | Set by CDK |
-| `SECRETS_ARN` | Secrets Manager ARN | Set by CDK |
-| `NOTIFICATION_TOPIC_ARN` | SNS topic for notifications | Set by CDK |
-| `LOG_LEVEL` | Logging level | `INFO` |
+**Local / deploy (in `.env`):**
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `AWS_PROFILE` | AWS CLI profile for deploy and AWS commands | Yes |
+| `AWS_REGION` | AWS region where the stack is deployed (e.g. `us-west-2`) | Yes |
+| `COINBASE_API_KEY` / `COINBASE_API_SECRET` | For local runs only; Lambda uses Secrets Manager | No |
+
+**Lambda (set by CDK):**
+
+| Variable | Description |
+|----------|-------------|
+| `CONFIG_BUCKET` | S3 bucket for trading config |
+| `SECRETS_ARN` | Secrets Manager ARN |
+| `NOTIFICATION_TOPIC_ARN` | SNS topic for notifications |
+| `LOG_LEVEL` | Logging level (`INFO`) |
 
 ## API Credentials
 
@@ -189,26 +220,9 @@ Lambda Function (Python 3.11)
 
 ### Cross-Platform Dependency Building
 
-**Issue**: Mac-built `cryptography` library incompatible with AWS Lambda Linux environment.
+**Issue**: Mac-built `cryptography` (and other native deps) are incompatible with AWS Lambda’s Linux environment; the real trader fails to load and the Lambda falls back to a mock.
 
-**Solutions**:
-1. **GitHub Actions CI/CD** (Recommended):
-   ```yaml
-   # .github/workflows/deploy.yml
-   - name: Build Lambda package
-     run: |
-       pip install --target lambda -r requirements.txt
-       # Builds in Linux environment
-   ```
-
-2. **Docker-based local development**:
-   ```bash
-   docker run --rm -v $(pwd):/app amazonlinux:2 bash -c "
-     yum install -y python3 python3-pip && 
-     cd /app && 
-     pip3 install --target lambda -r requirements.txt
-   "
-   ```
+**Solution**: The deploy script runs `prepare_lambda_package.sh`, which uses **Docker** (when available) to install dependencies inside the AWS Lambda Python 3.11 image with `--platform linux/amd64`, so the package works on Lambda. **Install Docker** and run `./scripts/deploy.sh`; no manual build step is required. If Docker is not available, the script falls back to local `pip` and will warn that Lambda may fail on Mac.
 
 ### Price Precision Errors
 
@@ -227,36 +241,25 @@ rounded_price = round(target_price / price_increment) * price_increment
 # Validate configuration
 python config_validator.py --full-check
 
-# Test API connection
+# Test API connection (uses .cdp_api_key.json or .env)
 python coinbase_trader.py
 
 # Test market data
 python test_fil_data.py
 
-# Dry run trading strategy
+# Dry run trading strategy (same logic as Lambda; test locally before deploying)
 python execute_trading_strategy.py --dry-run --verbose
-
-# Test Lambda function locally (requires Docker)
-docker run --rm -p 9000:8080 coinbase-trading-bot:latest
-curl -X POST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
 ```
+Use the commands above to test config, credentials, and trading logic locally. Lambda runs the same logic (config from S3, creds from Secrets Manager) and returns a JSON-serializable summary. Test Lambda by the scheduled run or by invoking the function from the AWS console or CLI (using the same profile as deploy).
 
 ## Deployment Workflows
 
-### Local Development → AWS
+### Deploy to AWS
 ```bash
-# Build Lambda package
-./scripts/prepare_lambda_package.sh
-
-# Deploy infrastructure
+# Ensure .env exists with AWS_PROFILE set; then deploy (builds Lambda package automatically)
 ./scripts/deploy.sh
 ```
-
-### GitHub Actions CI/CD (Recommended)
-```bash
-# Push to GitHub triggers automatic deployment
-git push origin main
-```
+To only rebuild the Lambda package without deploying (e.g. to inspect `lambda/`): run `./scripts/prepare_lambda_package.sh` manually.
 
 ## Security Best Practices
 
