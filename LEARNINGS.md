@@ -77,10 +77,11 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 ### 7. Security Best Practices
 - **Credentials**: Never commit API credentials to version control
 - **File Protection**: Added to `.gitignore`:
-  - `.env` files
+  - `.env` (and `.env.example` is the template only)
   - `.cdp_api_key.json`
-  - `*.json` (catches any other credential files)
-- **Key File Approach**: Using JSON key files is more secure than environment variables for production
+  - `trading_config.json`
+  - `test_*.py` (test scripts may contain temporary credentials)
+- **Production**: Use AWS Secrets Manager for Lambda; use `.cdp_api_key.json` or `.env` only for local runs
 
 ### 8. Development Workflow & Git Practices
 1. **Start with Sandbox**: Use sandbox/testnet environment for initial testing
@@ -126,20 +127,25 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 ## Project Structure
 ```
 CoinbaseUtils/
-├── coinbase_trader.py          # Main trading class with configuration support
-├── execute_trading_strategy.py # Configuration-driven order execution
-├── config_validator.py        # Configuration validation utilities
-├── trading_config.json        # Active trading configuration (not in git)
+├── coinbase_trader.py          # Main trading class (local + copied to lambda/)
+├── execute_trading_strategy.py # Configuration-driven execution (local)
+├── config_validator.py        # Configuration validation
+├── trading_config.json        # Active config (not in git; upload to S3 via upload_config.sh)
 ├── trading_config.example.json # Configuration template
-├── test_fil_data.py           # Testing market data and balances
-├── debug_order_response.py    # Order response structure analysis
 ├── .cdp_api_key.json          # API credentials (not in git)
-├── .env.example               # Environment variable template
-├── .gitignore                 # Security: excludes credentials
-├── requirements.txt           # Python dependencies
-├── LEARNINGS.md              # This documentation
-├── agents.md                  # AI agent development guidelines
-└── CdpSdkInfo.md             # CDP SDK reference (for context)
+├── .env                        # AWS_PROFILE, AWS_REGION, optional Coinbase (not in git)
+├── .env.example                # Template: AWS_PROFILE, AWS_REGION, Coinbase placeholders
+├── requirements.txt            # Python dependencies
+├── cdk/                        # AWS CDK (Lambda, S3, Secrets Manager, SNS, EventBridge)
+├── lambda/                     # Lambda handler + deps (built by prepare_lambda_package.sh)
+│   ├── lambda_function.py      # Handler; uses _run_strategy, _serializable_result
+│   └── coinbase_trader.py      # Copy of trader (supports name or id in key file)
+├── scripts/
+│   ├── deploy.sh               # Deploy stack (requires .env: AWS_PROFILE, AWS_REGION)
+│   ├── prepare_lambda_package.sh # Build Lambda package in Docker (linux/amd64)
+│   └── upload_config.sh        # Upload trading_config.json to S3
+├── LEARNINGS.md                # This documentation
+└── CdpSdkInfo.md               # CDP SDK reference
 ```
 
 ## Configuration System Usage
@@ -201,88 +207,44 @@ python execute_trading_strategy.py
   - Calculates holdings sold vs available for future trades
   - Provides trading capacity guidance
 
-## Current Status (Latest Session - July 2025)
+## Current Status (Latest)
 
-### Recently Completed Features
-1. **AWS Lambda Infrastructure Deployment** - ✅ COMPLETED (July 2025)
-   - Complete Infrastructure as Code using AWS CDK
-   - Lambda function with bundled dependencies (simplified approach)
-   - S3 bucket for trading configuration storage
-   - Secrets Manager for secure API credential storage
-   - SNS notifications for execution reports
-   - EventBridge scheduling for daily execution (6:15 AM UTC)
-   - CloudWatch monitoring and error alarms
-   - **Status**: Infrastructure fully deployed to us-west-2
+### Lambda: Production-Ready
+1. **AWS Lambda** – ✅ Working end-to-end
+   - **Build**: `prepare_lambda_package.sh` uses Docker (`public.ecr.aws/lambda/python:3.11`) with `--platform linux/amd64` so dependencies (including `cryptography`) are built for Lambda’s environment. Without Docker, Mac-built packages fail on Lambda.
+   - **Secrets Manager**: Use `SecretId=` (not `SecretArn=`) in `get_secret_value()` for boto3 compatibility.
+   - **Response**: Lambda returns a JSON-serializable summary only; SDK objects (e.g. `CreateOrderResponse`) are stripped via `_serializable_result` and `_run_strategy` so the handler never serializes non-dict types.
+   - **Credentials**: Key file can use either `name` or `id` (Lambda/Secrets use `name`); both are supported in root and lambda `coinbase_trader.py`.
 
-2. **Trading Bot Configuration Management** - ✅ COMPLETED
-   - JSON-based configuration system with S3 storage
-   - Secrets management with proper field mapping (`name`/`privateKey`)
-   - Trading config successfully uploaded and accessible
-   - Email notification system functional
+2. **Deploy and config**
+   - **.env required**: `AWS_PROFILE` and `AWS_REGION` (e.g. `us-west-2`) must be set so deploy, upload, and invoke all target the same region. No hardcoded region in scripts.
+   - **Upload config**: `./scripts/upload_config.sh` uploads `trading_config.json` to the stack’s S3 bucket (reads bucket from CloudFormation outputs).
+   - **Test Lambda**: Invoke with the same profile and region as deploy; otherwise you may hit a different stack or get “resource not found.”
 
-3. **Core Lambda Functionality** - ✅ WORKING (with limitations)
-   - Lambda function executes successfully (StatusCode: 200)
-   - Credentials retrieval from Secrets Manager working
-   - Configuration download from S3 working
-   - Email notifications working
-   - Mock trader implementation as fallback
+   - **Lambda handler**: All result data must come from the `summary` dict returned by `_run_strategy` (e.g. `dry_run`, `successful_orders`, `failed_orders`); avoid referencing variables that are not in scope in the handler.
 
-### Current Challenges
+3. **Dry run vs live**
+   - **Local**: `execute_trading_strategy.py --dry-run` does not place orders; without `--dry-run` it uses `dry_run` from config.
+   - **Lambda**: Uses `dry_run` from the config in S3. If you invoke Lambda for testing, set `dry_run: true` in the S3 config first (or accept that a test invoke can place a real order).
 
-#### 1. **Cross-Platform Dependency Build Issues** - ⚠️ BLOCKING PRODUCTION
-**Problem**: The `cryptography` library contains architecture-specific compiled binaries
-- **Root Cause**: Coinbase Advanced Trading API requires ES256 (ECDSA) JWT signatures
-- **Dependency Chain**: `coinbase-advanced-py` → `PyJWT` → `cryptography` → `cffi` → compiled C/Rust binaries
-- **Why Cryptography is Required**: ES256 elliptic curve operations are computationally intensive and require compiled libraries for performance and security
-- **Architecture Mismatch**: Mac ARM64 → AWS Lambda x86_64/ARM64 compatibility issues
-- **Error**: `invalid ELF header` when Lambda tries to import `cryptography` module
-- **Impact**: CoinbaseTrader cannot initialize, falling back to mock implementation
-- **Why Pure Python Won't Work**: 
-  - Pure Python ECDSA libraries exist (python-jose, ecdsa) but have critical security vulnerabilities
-  - CVE-2024-23342: Timing attacks can leak private keys in pure Python implementations
-  - Not recommended for production use with real trading credentials
-- **Correct Solution**: Build dependencies in Linux environment, not avoid cryptography
-
-#### 2. **Mac Development Environment Challenges**
-- **Package Building**: `pip install --target` on Mac creates Mac-specific binaries
-- **Architecture Mismatch**: Mac ARM64 → AWS Lambda x86_64/ARM64 compatibility issues
-- **Development Workflow**: No local testing of actual Lambda environment
-
-### Architecture and Infrastructure Details
-
-#### AWS Resources Created
+### Architecture
 ```
-├── S3 Bucket: coinbase-trading-config-290135766346-us-west-2
-├── Secrets Manager: arn:aws:secretsmanager:us-west-2:290135766346:secret:CoinbaseApiCredentialsFAECE-*
-├── Lambda Function: CoinbaseTradingBotStack-TradingBotFunctionA03094A0-jOwZZd14P29v
-│   ├── Runtime: Python 3.11
-│   ├── Memory: 512MB
-│   ├── Timeout: 5 minutes
-│   └── Package Size: ~26MB (with bundled dependencies)
-├── SNS Topic: Email notifications
-├── EventBridge Rule: Daily execution at 6:15 AM UTC
-└── CloudWatch: Logs and error monitoring
+├── S3 Bucket: stack-defined (config storage)
+├── Secrets Manager: stack-defined secret for Coinbase API credentials
+├── Lambda: Python 3.11, ~17MB package (Docker-built deps)
+├── SNS: Email notifications
+├── EventBridge: Daily 6:15 AM UTC
+└── CloudWatch: Logs and error alarms
 ```
 
-#### Current Lambda Execution Flow
-1. ✅ Retrieve API credentials from Secrets Manager
-2. ✅ Download trading configuration from S3
-3. ❌ Import coinbase_trader (fails due to cryptography library)
-4. ✅ Fallback to mock trader implementation
-5. ✅ Process trading pairs (currently 1 enabled: FIL-USD)
-6. ❌ Place actual orders (mock trader returns failure)
-7. ✅ Send email notification with execution report
-
-### Outstanding Issues
-1. **Cross-Platform Build Environment** - 🚨 CRITICAL
-   - Need Linux-compatible dependency building
-   - Current mock trader prevents actual trading
-   - **Next Action**: Implement Docker-based build process or GitHub Actions CI/CD
-
-2. **Local Development Reproducibility** - ⚠️ IMPORTANT
-   - Cannot reliably test Lambda packages locally
-   - No local Lambda environment simulation
-   - **Next Action**: Docker-based local development environment
+### Lambda Execution Flow (current)
+1. ✅ Load env (CONFIG_BUCKET, SECRETS_ARN, NOTIFICATION_TOPIC_ARN)
+2. ✅ Get credentials from Secrets Manager (`SecretId=...`)
+3. ✅ Get trading config from S3
+4. ✅ Initialize CoinbaseTrader (Linux-built cryptography)
+5. ✅ Run strategy (_run_strategy), place orders or dry-run per config
+6. ✅ Build serializable summary (_serializable_result)
+7. ✅ Send SNS email and return JSON response
 
 ## Next Steps for Production Deployment
 
@@ -323,12 +285,9 @@ jobs:
       - uses: actions/setup-python@v5
       - uses: actions/setup-node@v4
       
-      # Build dependencies in Linux environment
+      # Build Lambda package in Docker (linux/amd64) so cryptography works on Lambda
       - name: Build Lambda package
-        run: |
-          pip install --target lambda -r requirements.txt
-          cp coinbase_trader.py lambda/
-          cp lambda/lambda_function.py lambda/
+        run: ./scripts/prepare_lambda_package.sh
           
       # Deploy with CDK
       - name: Deploy infrastructure
@@ -425,11 +384,11 @@ print('✅ Lambda function imports successfully')
 
 ## Deployment Architecture Evolution
 
-### Current State (July 2025)
+### Current State
 ```
-Local Mac → Manual CDK Deploy → AWS Lambda (us-west-2)
-├── Issues: Architecture compatibility, manual process
-└── Status: Infrastructure working, trading disabled
+Local Mac → Manual CDK Deploy → AWS Lambda (region from .env)
+├── Build: Docker (linux/amd64) for Lambda-compatible deps
+└── Status: Infrastructure and trading working end-to-end
 ```
 
 ### Target State (Week 1)
@@ -463,7 +422,11 @@ GitHub → CI/CD Pipeline → Multi-Environment AWS
 
 ### "KeyError: 'name'" Error
 - **Cause**: Incorrect JSON key file structure
-- **Solution**: Ensure JSON has "name" and "privateKey" fields in correct format
+- **Solution**: Ensure JSON has "name" (or "id") and "privateKey" fields in correct format
+
+### Lambda: Secrets Manager / Response Errors
+- **Secrets Manager**: Use `SecretId=` (not `SecretArn=`) in boto3 `get_secret_value()`.
+- **Lambda response**: Return only JSON-serializable data; convert SDK objects (e.g. `CreateOrderResponse`) via a helper like `_serializable_result` so the handler never serializes non-dict types.
 
 ### Authentication Failures
 - **Most Common**: Using Ed25519 keys when ECDSA is required
