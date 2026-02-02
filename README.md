@@ -6,6 +6,8 @@ A Python-based automated trading bot for Coinbase Advanced Trading API with AWS 
 
 This project implements programmatic crypto trading using the Coinbase Advanced Trading API. It supports configuration-driven trading strategies with automated deployment to AWS Lambda for scheduled execution.
 
+**Key use case:** Coinbase supports **scheduled buys** (e.g. daily DCA) but not **scheduled sales**. This bot lets you run **daily (or otherwise scheduled) sales** of crypto assets on Coinbase—for example, selling a fixed amount of FIL each day at a limit price—by running the strategy on a schedule (e.g. EventBridge at 6:15 AM UTC) in AWS Lambda.
+
 ## Features
 
 - ✅ **Coinbase Advanced Trading API Integration**
