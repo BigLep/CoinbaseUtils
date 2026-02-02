@@ -1,11 +1,11 @@
 # AI Agent Development Guidelines
 
-This document outlines best practices for AI agents (like Claude) working on this cryptocurrency trading project. Following these guidelines ensures consistent development patterns, proper version control, and comprehensive knowledge capture.
+This document outlines best practices for AI agents (like Claude) working on this cryptocurrency trading project. Following these guidelines ensures consistent development patterns, proper version control, and comprehensive knowledge capture. This file follows the [AGENTS.md](https://agents.md) format for agent-facing documentation.
 
 ## Git Commit Strategy
 
 - **Rule**: Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit. See [CONTRIBUTING.md](CONTRIBUTING.md) for types, format, and examples.
-- **Commit after each major step**: After adding a feature, fixing a significant bug, completing a phase of work, or before switching to a different area. Don’t wait for “perfect” code; atomic commits help.
+- **Commit after each major step**: After adding a feature, fixing a significant bug, completing a phase of work, or before switching to a different area. Don't wait for "perfect" code; atomic commits help.
 
 ## Knowledge Capture in LEARNINGS.md
 
