@@ -50,9 +50,12 @@ lambda_layer/
 # Mac artifacts
 .DS_Store
 
-# Temporary test files
+# Temporary / ad-hoc scripts (root)
 debug_*.py
 test_*.py
 check_*.py
 place_*.py
 response.json
+
+# Local debugging (moved from root to reduce clutter)
+local-debugging/

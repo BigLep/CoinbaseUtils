@@ -58,6 +58,12 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
    python execute_trading_strategy.py
    ```
 
+5. **Optional smoke tests and helpers** (run from repo root; require `.cdp_api_key.json` or env):
+   - `python scripts/check_env.py` — check COINBASE_* env vars are set
+   - `python scripts/check_key_formats.py` — test which key formats work (reads `.cdp_api_key.json`)
+   - `python scripts/smoke_fil_data.py` — FIL price, balance, products
+   - `python scripts/smoke_balance_logging.py` — balance and post-order logging
+
 ### AWS Lambda Deployment
 
 1. **Prerequisites:**
@@ -134,8 +140,22 @@ CoinbaseUtils/
 └── scripts/
     ├── deploy.sh            # Deploy stack (requires .env with AWS_PROFILE; runs prepare then CDK)
     ├── prepare_lambda_package.sh # Build Lambda package (Docker for Linux deps)
-    └── upload_config.sh     # Upload trading_config.json to S3 (uses .env and stack bucket)
+    ├── upload_config.sh     # Upload trading_config.json to S3 (uses .env and stack bucket)
+    ├── check_env.py         # Check COINBASE_* env (no secret output)
+    ├── check_key_formats.py # Test key formats (requires .cdp_api_key.json)
+    ├── smoke_fil_data.py    # FIL market data smoke test
+    └── smoke_balance_logging.py # Balance logging smoke test
 ```
+
+### Root Python files (what lives where)
+
+| File | Role | Action |
+|------|------|--------|
+| **coinbase_trader.py** | Core trading class; imported by strategy, validator, Lambda, scripts | **Keep in root** — this is the main library. |
+| **execute_trading_strategy.py** | Main entry point: run strategy from config (dry-run or live) | **Keep in root** — primary CLI. |
+| **config_validator.py** | Validates `trading_config.json` | **Keep in root** — run as `python config_validator.py --full-check`. |
+
+Ad-hoc one-off scripts (test_*.py, debug_*.py, check_*.py, place_*.py) belong in **local-debugging/** to avoid root clutter; that folder is **gitignored**. Run them from repo root: `python local-debugging/script_name.py`. The useful behavior is also in `scripts/` (e.g. `smoke_fil_data.py`, `check_key_formats.py`). **Do not commit** anything under `local-debugging/` (e.g. `test_your_key.py` can contain real API keys).
 
 ## Configuration
 
