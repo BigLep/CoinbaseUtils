@@ -30,10 +30,17 @@ if [ -z "${AWS_REGION:-}" ]; then
   exit 1
 fi
 
-# Optional overrides from command line: ./scripts/deploy.sh [email] [region]
-NOTIFICATION_EMAIL=${1:-"your-email@example.com"}
+# Notification email: pass as first argument, or set NOTIFICATION_EMAIL in .env. Required.
+NOTIFICATION_EMAIL=${1:-${NOTIFICATION_EMAIL:-}}
 if [ -n "${2:-}" ]; then AWS_REGION=$2; fi
 export AWS_DEFAULT_REGION=$AWS_REGION
+
+if [ -z "$NOTIFICATION_EMAIL" ] || [ "$NOTIFICATION_EMAIL" = "your-email@example.com" ]; then
+  echo "❌ Notification email is required so you receive run reports."
+  echo "   Pass it when deploying: ./scripts/deploy.sh your@email.com"
+  echo "   Or set NOTIFICATION_EMAIL=your@email.com in .env"
+  exit 1
+fi
 
 echo "=== Coinbase Trading Bot Deployment ==="
 echo "AWS Profile: $AWS_PROFILE"

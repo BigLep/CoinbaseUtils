@@ -480,7 +480,8 @@ class CoinbaseTrader:
                     "current_price": current_price,
                     "limit_price": limit_price,
                     "quantity": quantity,
-                    "offset_percent": offset_percent
+                    "offset_percent": offset_percent,
+                    "expected_revenue": float(limit_price_str) * float(quantity),
                 }
             }
         

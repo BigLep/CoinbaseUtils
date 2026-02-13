@@ -88,11 +88,11 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 
 3. **Deploy infrastructure:**
    ```bash
-   # Deploy reads AWS_PROFILE from .env and runs the Lambda package build + CDK deploy
-   ./scripts/deploy.sh
+   # Deploy reads AWS_PROFILE from .env; notification email is required (pass as first argument)
+   ./scripts/deploy.sh your@email.com
 
-   # Optional: override notification email and region
-   ./scripts/deploy.sh your-email@example.com us-east-1
+   # Optional: override region as second argument
+   ./scripts/deploy.sh your@email.com us-east-1
    ```
    The script builds the Lambda package (using Docker when available for Linux-compatible dependencies) and deploys the stack.
 
@@ -140,7 +140,7 @@ CoinbaseUtils/
 │   └── ...                  # Dependencies installed here for Linux (Docker)
 │
 └── scripts/
-    ├── deploy.sh            # Deploy stack (requires .env with AWS_PROFILE; runs prepare then CDK)
+    ├── deploy.sh            # Deploy stack (requires .env + notification email; see Notifications)
     ├── prepare_lambda_package.sh # Build Lambda package (Docker for Linux deps)
     ├── upload_config.sh     # Upload trading_config.json to S3 (uses .env and stack bucket)
     ├── check_env.py         # Check COINBASE_* env (no secret output)
@@ -278,8 +278,8 @@ Use the commands above to test config, credentials, and trading logic locally. L
 
 ### Deploy to AWS
 ```bash
-# Ensure .env exists with AWS_PROFILE set; then deploy (builds Lambda package automatically)
-./scripts/deploy.sh
+# Ensure .env exists with AWS_PROFILE set; pass your notification email (required)
+./scripts/deploy.sh your@email.com
 ```
 To only rebuild the Lambda package without deploying (e.g. to inspect `lambda/`): run `./scripts/prepare_lambda_package.sh` manually.
 
@@ -292,12 +292,33 @@ To only rebuild the Lambda package without deploying (e.g. to inspect `lambda/`)
 - ✅ **Use VPC endpoints** for private API access
 - ✅ **Regular credential rotation**
 
+## Notifications (how to get notified)
+
+You get an **email after every run**—both successful runs and failures—so you can see what was posted and at what price.
+
+1. **Provide your email when deploying**  
+   The deploy script **requires** a notification email (it will fail otherwise). Pass it as the first argument:
+   ```bash
+   ./scripts/deploy.sh your@email.com
+   ```
+   Optional: set `NOTIFICATION_EMAIL=your@email.com` in `.env` so you don’t have to pass it every time; you can still override with `./scripts/deploy.sh other@email.com`.  
+   The stack subscribes this address to an SNS topic. **Do not** rely on a default in `cdk.json`—if you deploy without providing an email, the script exits with an error so the stack never gets a placeholder like `your-email@example.com` that would overwrite your existing subscription.
+
+2. **Confirm the SNS subscription**  
+   After the first deploy, AWS sends a **“Confirm subscription”** email to that address. You **must click the confirmation link**; until you do, you will not receive execution emails.
+
+3. **What you’ll receive**  
+   - **Every run:** One email per execution with subject like “Trading Bot Execution” or “Trading Bot Execution (DRY RUN)”. The body includes a “Posted (quantity @ price)” section and total expected amount, plus per-pair details.  
+   - **On Lambda errors:** An additional “Trading Bot Critical Error” or CloudWatch alarm email.
+
+If you only see failure emails and not success emails, the usual cause is that the SNS subscription was never confirmed—check the “Confirm subscription” message in your inbox and confirm it.
+
 ## Monitoring & Alerts
 
 - **CloudWatch Logs**: Lambda execution logs
 - **CloudWatch Metrics**: Error rates, duration, invocations
-- **SNS Notifications**: Email reports after each execution
-- **CloudWatch Alarms**: Error threshold alerts
+- **SNS Notifications**: Email reports after each execution (see [Notifications](#notifications-how-to-get-notified))
+- **CloudWatch Alarms**: Error threshold alerts (same SNS topic)
 
 ## Cost Optimization
 
