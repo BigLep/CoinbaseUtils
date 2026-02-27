@@ -152,7 +152,36 @@ def lambda_handler(event, context):
         summary = _run_strategy(config_data, trader, request_id=context.aws_request_id)
         logger.info(f"Processing {summary['processed_pairs']} pairs (dry_run: {summary['dry_run']})")
         logger.info(f"Execution completed: {summary['successful_orders']} successful, {summary['failed_orders']} failed")
-        
+
+        # Gather balance and runout for each enabled pair (real trader only)
+        balance_info = []
+        if hasattr(trader, "get_asset_balance"):
+            for pair_config in config_data.get("trading_pairs", []):
+                if not pair_config.get("enabled", False):
+                    continue
+                symbol = pair_config.get("symbol", "")
+                if "-" not in symbol:
+                    continue
+                base_asset = symbol.split("-")[0]
+                qty_per_run = _safe_float(pair_config.get("quantity"), 0) or 0
+                try:
+                    bal = trader.get_asset_balance(base_asset)
+                except Exception as e:
+                    logger.warning(f"Balance check failed for {base_asset}: {e}")
+                    bal = {"error": str(e)}
+                available = None if "error" in bal else _safe_float(bal.get("available"))
+                days_remaining = None
+                if available is not None and qty_per_run > 0:
+                    days_remaining = available / qty_per_run
+                balance_info.append({
+                    "symbol": symbol,
+                    "currency": base_asset,
+                    "available": available,
+                    "quantity_per_run": qty_per_run,
+                    "days_remaining": days_remaining,
+                })
+        summary["balance_info"] = balance_info
+
         # Send notification email
         notification_subject = f"Trading Bot Execution {'(DRY RUN)' if summary['dry_run'] else ''}"
         notification_message = format_execution_report(summary)
@@ -260,6 +289,30 @@ Timestamp: {summary['timestamp']}
         report += "\n"
     else:
         report += "\n--- No orders posted this run ---\n\n"
+
+    # --- Balance & runout at current sell rate ---
+    balance_info = summary.get("balance_info", [])
+    if balance_info:
+        report += "\n--- Balance & runout at current sell rate ---\n"
+        for info in balance_info:
+            symbol = info.get("symbol", "?")
+            currency = info.get("currency", "?")
+            available = info.get("available")
+            qty_per_run = info.get("quantity_per_run")
+            days_remaining = info.get("days_remaining")
+            if available is not None:
+                avail_str = f"{available} {currency}"
+            else:
+                avail_str = "unavailable"
+            qty_str = f"{qty_per_run} {currency}/run" if qty_per_run is not None and qty_per_run > 0 else "—"
+            if days_remaining is not None:
+                days_str = f"~{int(round(days_remaining))} days" if days_remaining >= 0 else "0 days"
+            else:
+                days_str = "N/A"
+            report += f"  {symbol}: {avail_str} | {qty_str} → {days_str} until run out\n"
+        report += "\n"
+    else:
+        report += "\n--- Balance/runout: not available (mock mode or no enabled pairs) ---\n\n"
 
     # --- Summary and detailed results ---
     report += f"""Execution Summary:
