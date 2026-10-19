@@ -1,9 +1,13 @@
 #!/bin/bash
 # Prepare Lambda deployment package
-# Uses Docker to install dependencies for Amazon Linux so cryptography works on Lambda.
+# Uses uv to install prebuilt Linux (manylinux x86_64) wheels for the Lambda Python version,
+# so cryptography works on Lambda even when building on a Mac. No Docker needed.
 # (Mac-built wheels are incompatible with Lambda and cause "Mock trader" fallback every run.)
 
 set -e
+
+# Keep in sync with the runtime in cdk/stacks/trading_bot_stack.py
+LAMBDA_PYTHON_VERSION="3.14"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -19,23 +23,23 @@ cp coinbase_trader.py lambda/
 cp trading_config.json lambda/ 2>/dev/null || echo "Note: trading_config.json not found - will be handled by S3"
 
 # Install dependencies for Linux (required for cryptography on Lambda)
-if command -v docker &>/dev/null; then
-    echo "Installing Python dependencies in Docker (Amazon Linux / Lambda runtime)..."
-    # Use linux/amd64 so wheels work on default Lambda (x86_64); avoids ARM-only wheels on M1/M2 Macs
-    docker run --rm --platform linux/amd64 --entrypoint pip \
-        -v "$PROJECT_ROOT:/var/task" \
-        -w /var/task \
-        public.ecr.aws/lambda/python:3.11 \
-        install --target lambda -r requirements.txt
-else
-    echo "WARNING: Docker not found. Installing with local pip."
-    echo "If you are on Mac, Lambda may fail (cryptography built for wrong OS)."
-    pip install --target lambda -r requirements.txt
+if ! command -v uv &>/dev/null; then
+    echo "❌ uv not found. Install it: brew install uv (or see https://docs.astral.sh/uv/)"
+    exit 1
 fi
+echo "Installing Python dependencies for Lambda (Python $LAMBDA_PYTHON_VERSION, linux x86_64) with uv..."
+# --only-binary: fail rather than build an sdist for the wrong OS
+uv pip install \
+    --target lambda \
+    --python-version "$LAMBDA_PYTHON_VERSION" \
+    --python-platform x86_64-manylinux2014 \
+    --only-binary :all: \
+    -r requirements.txt
 
 # Clean up unnecessary files to reduce package size
 echo "Cleaning up unnecessary files..."
 find lambda -type f -name "*.pyc" -delete
+rm -f lambda/.lock  # uv --target lock file
 find lambda -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find lambda -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
 find lambda -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true

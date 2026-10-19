@@ -59,3 +59,6 @@ response.json
 
 # Local debugging (moved from root to reduce clutter)
 local-debugging/
+# Stray native build artifacts at lambda/ root (e.g. mypyc, cffi)
+lambda/*.so
+lambda/.lock

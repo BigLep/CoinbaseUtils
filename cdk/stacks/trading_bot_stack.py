@@ -76,7 +76,7 @@ class TradingBotStack(Stack):
         # Lambda function (with bundled dependencies - simpler approach)
         trading_lambda = _lambda.Function(
             self, "TradingBotFunction",
-            runtime=_lambda.Runtime.PYTHON_3_11,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="lambda_function.lambda_handler",
             code=_lambda.Code.from_asset("../lambda"),
             role=lambda_role,

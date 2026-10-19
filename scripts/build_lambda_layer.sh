@@ -10,7 +10,8 @@ LAYER_DIR="lambda_layer/python"
 mkdir -p $LAYER_DIR
 
 # Install dependencies to layer directory
-pip install --target $LAYER_DIR -r requirements.txt
+uv pip install --target $LAYER_DIR --python-version 3.14 --python-platform x86_64-manylinux2014 \
+    --only-binary :all: -r requirements.txt
 
 # Remove unnecessary files to reduce layer size
 find $LAYER_DIR -type f -name "*.pyc" -delete

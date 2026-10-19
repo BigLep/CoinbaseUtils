@@ -28,8 +28,10 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
    ```bash
    git clone <repository-url>
    cd CoinbaseUtils
-   pip install -r requirements.txt
+   uv venv --python 3.14
+   uv pip install -r requirements.txt
    ```
+   Then run scripts with `uv run` (e.g. `uv run python config_validator.py --full-check`), or activate the venv with `source .venv/bin/activate`.
 
 2. **Configure API credentials:**
    - Create API keys on [Coinbase Developer Platform](https://www.coinbase.com/cloud)
@@ -69,9 +71,9 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 ### AWS Lambda Deployment
 
 1. **Prerequisites:**
-   - **Docker** (recommended): used by the deploy script to build Lambda dependencies for Linux. Without it, Mac-built packages may fail on Lambda.
+   - **[uv](https://docs.astral.sh/uv/)** (`brew install uv`): builds the Lambda package and runs the CDK app. The deploy script uses `uv pip install --python-platform x86_64-manylinux2014` to download prebuilt Linux wheels for native packages like `cryptography`, so the package works on Lambda even when built on a Mac. Docker is not required.
    - **AWS CLI** with a configured profile (see step 2).
-   - **Node.js** and **AWS CDK**: `npm install -g aws-cdk`, then `cd cdk && npm install`. Python: `pip install aws-cdk-lib constructs`.
+   - **Node.js** and **AWS CDK**: `npm install -g aws-cdk`. The CDK Python dependencies (`cdk/requirements.txt`) are installed on demand by `uv run` (see `cdk/cdk.json`); no manual `pip install` needed.
 
 2. **Configure AWS profile and region (required):**
    ```bash
@@ -94,7 +96,7 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
    # Optional: override region as second argument
    ./scripts/deploy.sh your@email.com us-east-1
    ```
-   The script builds the Lambda package (using Docker when available for Linux-compatible dependencies) and deploys the stack.
+   The script builds the Lambda package with uv (Linux x86_64 wheels for Python 3.14), then deploys the stack.
 
 4. **Configure secrets and trading config (one-time per stack):**
    ```bash
@@ -137,11 +139,11 @@ CoinbaseUtils/
 ├── lambda/                   # Lambda code (handler + deps; built by prepare_lambda_package.sh)
 │   ├── lambda_function.py   # Lambda handler
 │   ├── coinbase_trader.py   # Trading logic (copied from root)
-│   └── ...                  # Dependencies installed here for Linux (Docker)
+│   └── ...                  # Dependencies installed here for Linux (uv)
 │
 └── scripts/
     ├── deploy.sh            # Deploy stack (requires .env + notification email; see Notifications)
-    ├── prepare_lambda_package.sh # Build Lambda package (Docker for Linux deps)
+    ├── prepare_lambda_package.sh # Build Lambda package (uv, Linux wheels)
     ├── upload_config.sh     # Upload trading_config.json to S3 (uses .env and stack bucket)
     ├── check_env.py         # Check COINBASE_* env (no secret output)
     ├── check_key_formats.py # Test key formats (requires .cdp_api_key.json)
@@ -221,7 +223,7 @@ Ad-hoc one-off scripts (test_*.py, debug_*.py, check_*.py, place_*.py) belong in
 ```
 EventBridge (Daily 6:15 AM UTC)
     ↓
-Lambda Function (Python 3.11)
+Lambda Function (Python 3.14)
     ↓
 ├── Secrets Manager (API credentials)
 ├── S3 (Trading configuration)
@@ -244,7 +246,17 @@ Lambda Function (Python 3.11)
 
 **Issue**: Mac-built `cryptography` (and other native deps) are incompatible with AWS Lambda’s Linux environment; the real trader fails to load and the Lambda falls back to a mock.
 
-**Solution**: The deploy script runs `prepare_lambda_package.sh`, which uses **Docker** (when available) to install dependencies inside the AWS Lambda Python 3.11 image with `--platform linux/amd64`, so the package works on Lambda. **Install Docker** and run `./scripts/deploy.sh`; no manual build step is required. If Docker is not available, the script falls back to local `pip` and will warn that Lambda may fail on Mac.
+**Solution**: The deploy script runs `prepare_lambda_package.sh`, which uses `uv pip install --python-version 3.14 --python-platform x86_64-manylinux2014 --only-binary :all:` to download the prebuilt Linux wheels PyPI publishes for these packages. Nothing is compiled locally, so the build works from a Mac without Docker. `--only-binary` makes the build fail rather than silently building a package for the wrong OS.
+
+**Deploy failures to watch for:**
+- `uv not found` — install uv (`brew install uv`) and retry.
+- Lambda runs but emails say "Mock trader" / no real orders — the package has wheels for the wrong platform or Python version; check that `LAMBDA_PYTHON_VERSION` in `prepare_lambda_package.sh` matches the runtime in `cdk/stacks/trading_bot_stack.py`, then redeploy.
+
+To verify a build against the real Lambda runtime (optional, needs Docker):
+```bash
+docker run --rm --platform linux/amd64 --entrypoint python -v "$PWD/lambda:/var/task:ro" -w /var/task \
+  public.ecr.aws/lambda/python:3.14 -c "import coinbase_trader, lambda_function; print('imports OK')"
+```
 
 ### Price Precision Errors
 

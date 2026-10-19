@@ -4,8 +4,9 @@
 
 1. **AWS Account**: You need an AWS account with programmatic access
 2. **AWS CLI**: Install and configure AWS CLI v2
-3. **Python**: Python 3.11+ installed locally
+3. **Python**: Python 3.14+ installed locally
 4. **CDK**: AWS CDK v2 installed
+5. **uv** (`brew install uv`): builds the Lambda package (downloads prebuilt Linux wheels for Python 3.14, so no Docker is needed) and runs the CDK app.
 
 ## Initial Setup Steps
 
@@ -57,12 +58,11 @@ aws sts get-caller-identity
 
 ### 4. Install Python Dependencies
 ```bash
-# In the project root directory
-pip install -r requirements.txt
+# In the project root directory (local development)
+uv venv --python 3.14
+uv pip install -r requirements.txt
 
-# In the CDK directory
-cd cdk
-pip install -r requirements.txt
+# CDK dependencies are installed on demand by `uv run` (see cdk/cdk.json)
 ```
 
 ## Deployment Process
@@ -73,15 +73,15 @@ chmod +x scripts/*.sh
 ```
 
 ### 2. Deploy Infrastructure
+
 ```bash
 # Deploy with your email for notifications
 ./scripts/deploy.sh "your-email@example.com" "us-east-1"
 ```
 
 This script will:
-- Build the Lambda layer with dependencies
-- Prepare the Lambda deployment package
-- Bootstrap CDK in your account/region
+- Build the Lambda package with uv (Linux x86_64 wheels via `prepare_lambda_package.sh`)
+- Bootstrap CDK in your account/region (if needed)
 - Deploy the complete infrastructure stack
 
 ### 3. Post-Deployment Configuration

@@ -124,6 +124,17 @@ This project implements programmatic crypto trading using the Coinbase Advanced 
 - **Configuration-Driven**: Change trading parameters without code modifications
 - **Order Visibility**: All orders logged with direct URLs for immediate access
 
+### 12. Lambda Builds Without Docker (uv cross-platform install)
+- **Discovery**: Docker is not needed to build Linux-compatible native deps (`cryptography`, `cffi`, mypyc-compiled `charset_normalizer`); PyPI publishes manylinux wheels for all of them
+- **Context**: Upgrading the Lambda runtime from Python 3.11 to 3.14; the Docker build required Docker Desktop to be running, and the repo `.venv` and `python` on PATH had gone stale
+- **Solution**: `uv pip install --target lambda --python-version 3.14 --python-platform x86_64-manylinux2014 --only-binary :all:`; `cdk/cdk.json` runs the app via `uv run --no-project --with-requirements requirements.txt`. Verified by importing the package inside `public.ecr.aws/lambda/python:3.14`
+- **Impact**: Keep `LAMBDA_PYTHON_VERSION` in `prepare_lambda_package.sh` in sync with the CDK runtime; a mismatch loads wheels for the wrong ABI and the Lambda falls back to the mock trader. Old `*.cpython-311-*.so` files left at `lambda/` root are inert on 3.14 (now gitignored)
+
+### 13. Report Would-Be Price on Failed Orders
+- **Discovery**: When an order fails (e.g. `INSUFFICIENT_FUND`), the computed limit price was discarded, so the email gave no market signal
+- **Solution**: `place_configured_order` builds `order_details` before placing and attaches it to failure results; the email shows a "Not posted (would have been quantity @ price)" section
+- **Impact**: Seeing a good would-be price can prompt moving more FIL in to sell
+
 ## Project Structure
 ```
 CoinbaseUtils/
@@ -142,7 +153,7 @@ CoinbaseUtils/
 │   └── coinbase_trader.py      # Copy of trader (supports name or id in key file)
 ├── scripts/
 │   ├── deploy.sh               # Deploy stack (requires .env: AWS_PROFILE, AWS_REGION)
-│   ├── prepare_lambda_package.sh # Build Lambda package in Docker (linux/amd64)
+│   ├── prepare_lambda_package.sh # Build Lambda package with uv (Linux x86_64 wheels)
 │   └── upload_config.sh        # Upload trading_config.json to S3
 ├── LEARNINGS.md                # This documentation
 └── CdpSdkInfo.md               # CDP SDK reference
@@ -211,7 +222,7 @@ python execute_trading_strategy.py
 
 ### Lambda: Production-Ready
 1. **AWS Lambda** – ✅ Working end-to-end
-   - **Build**: `prepare_lambda_package.sh` uses Docker (`public.ecr.aws/lambda/python:3.11`) with `--platform linux/amd64` so dependencies (including `cryptography`) are built for Lambda’s environment. Without Docker, Mac-built packages fail on Lambda.
+   - **Build**: `prepare_lambda_package.sh` uses `uv pip install --target lambda --python-version 3.14 --python-platform x86_64-manylinux2014 --only-binary :all:` to fetch prebuilt Linux wheels (including `cryptography`/`cffi`), so the package works on Lambda when built on a Mac, without Docker.
    - **Secrets Manager**: Use `SecretId=` (not `SecretArn=`) in `get_secret_value()` for boto3 compatibility.
    - **Response**: Lambda returns a JSON-serializable summary only; SDK objects (e.g. `CreateOrderResponse`) are stripped via `_serializable_result` and `_run_strategy` so the handler never serializes non-dict types.
    - **Credentials**: Key file can use either `name` or `id` (Lambda/Secrets use `name`); both are supported in root and lambda `coinbase_trader.py`.
@@ -231,7 +242,7 @@ python execute_trading_strategy.py
 ```
 ├── S3 Bucket: stack-defined (config storage)
 ├── Secrets Manager: stack-defined secret for Coinbase API credentials
-├── Lambda: Python 3.11, ~17MB package (Docker-built deps)
+├── Lambda: Python 3.14, ~17MB package (uv-installed Linux wheels)
 ├── SNS: Email notifications
 ├── EventBridge: Daily 6:15 AM UTC
 └── CloudWatch: Logs and error alarms
@@ -285,7 +296,7 @@ jobs:
       - uses: actions/setup-python@v5
       - uses: actions/setup-node@v4
       
-      # Build Lambda package in Docker (linux/amd64) so cryptography works on Lambda
+      # Build Lambda package with uv (Linux x86_64 wheels) so cryptography works on Lambda
       - name: Build Lambda package
         run: ./scripts/prepare_lambda_package.sh
           
@@ -312,7 +323,7 @@ jobs:
 **Docker Setup**:
 ```dockerfile
 # Dockerfile.lambda
-FROM public.ecr.aws/lambda/python:3.11
+FROM public.ecr.aws/lambda/python:3.14
 
 # Install dependencies
 COPY requirements.txt .
@@ -387,7 +398,7 @@ print('✅ Lambda function imports successfully')
 ### Current State
 ```
 Local Mac → Manual CDK Deploy → AWS Lambda (region from .env)
-├── Build: Docker (linux/amd64) for Lambda-compatible deps
+├── Build: uv cross-platform install (manylinux x86_64) for Lambda-compatible deps
 └── Status: Infrastructure and trading working end-to-end
 ```
 
