@@ -470,19 +470,22 @@ class CoinbaseTrader:
         print(f"   Limit Price (rounded): ${limit_price_str}")
         print(f"   Quantity: {quantity}")
         
+        # Computed up front so failed orders (e.g. insufficient funds) still report the would-be price
+        order_details = {
+            "current_price": current_price,
+            "limit_price": limit_price,
+            "quantity": quantity,
+            "offset_percent": offset_percent,
+            "expected_revenue": float(limit_price_str) * float(quantity)
+        }
+        
         if dry_run:
             print("🔍 DRY RUN - Order would be placed but not actually executed")
             return {
                 "success": True,
                 "dry_run": True,
                 "symbol": symbol,
-                "details": {
-                    "current_price": current_price,
-                    "limit_price": limit_price,
-                    "quantity": quantity,
-                    "offset_percent": offset_percent,
-                    "expected_revenue": float(limit_price_str) * float(quantity),
-                }
+                "details": order_details
             }
         
         # Place the actual order
@@ -490,15 +493,6 @@ class CoinbaseTrader:
             order = self.place_post_only_limit_sell(symbol, quantity, limit_price_str)
             
             if order and order.success:
-                # Create details for logging
-                order_details = {
-                    "current_price": current_price,
-                    "limit_price": limit_price,
-                    "quantity": quantity,
-                    "offset_percent": offset_percent,
-                    "expected_revenue": float(limit_price_str) * float(quantity)
-                }
-                
                 # Log order placement with URL
                 order_id = self.log_order_placement(order, symbol, order_details)
                 
@@ -515,15 +509,15 @@ class CoinbaseTrader:
             elif order and order.error_response:
                 error_msg = f"{order.error_response.get('error', 'Unknown error')} - {order.error_response.get('message', '')}"
                 print(f"❌ Order failed: {error_msg}")
-                return {"success": False, "error": error_msg, "symbol": symbol}
+                return {"success": False, "error": error_msg, "symbol": symbol, "details": order_details}
             else:
                 print("❌ Order failed: Unknown error")
-                return {"success": False, "error": "Unknown error", "symbol": symbol}
+                return {"success": False, "error": "Unknown error", "symbol": symbol, "details": order_details}
                 
         except Exception as e:
             error_msg = f"Exception placing order: {e}"
             print(f"❌ {error_msg}")
-            return {"success": False, "error": error_msg, "symbol": symbol}
+            return {"success": False, "error": error_msg, "symbol": symbol, "details": order_details}
     
     def get_order(self, order_id: str):
         """Get order details"""
